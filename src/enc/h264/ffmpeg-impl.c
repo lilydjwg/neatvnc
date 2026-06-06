@@ -187,35 +187,14 @@ static AVFrame* fb_to_avframe(struct h264_encoder_ffmpeg* self, struct nvnc_fram
 		frame->buf[0] = desc_ref;
 		frame->data[0] = (void*)desc_ref->data;
 	}	else {
-		int rc = av_frame_get_buffer(frame, 0);
-		if (rc < 0) {
-			log_libav_error("av_frame_get_buffer failed", rc);
+		if (nvnc_frame_map(fb) < 0) {
+			nvnc_log(NVNC_LOG_ERROR, "nvnc_frame_map failed");
 			av_frame_free(&frame);
 			return NULL;
 		}
 
-		struct rfb_pixel_format src_fmt;
-		rc = rfb_pixfmt_from_fourcc(&src_fmt,
-				nvnc_frame_get_fourcc_format(fb));
-		if (rc < 0) {
-			nvnc_log(NVNC_LOG_WARNING, "rfb_pixfmt_from_fourcc failed. Assuming 32bpp.");
-			src_fmt.bits_per_pixel = 32;
-		}
-
-		int32_t stride = fb->stride * src_fmt.bits_per_pixel / 8;
-		if (nvnc_buffer_map(fb->buffer, fb->width, fb->height, &stride) < 0) {
-			nvnc_log(NVNC_LOG_ERROR, "nvnc_buffer_map failed");
-			av_frame_free(&frame);
-			return NULL;
-		}
-
-		for (int y = 0; y < fb->height; y++) {
-			memcpy(frame->data[0] + y * frame->linesize[0],
-						 (uint8_t*)fb->buffer->addr + y * stride,
-						 fb->width * 4);
-		}
-
-		nvnc_buffer_unmap(fb->buffer);
+		frame->linesize[0] = fb->stride * nvnc_frame_get_pixel_size(fb);
+		frame->data[0] = fb->buffer->addr;
 	}
 
 	// sRGB:
@@ -627,6 +606,8 @@ static void h264_encoder__do_work(struct aml_work* work)
 	}
 
 failure:
+	if (!self->hw)
+		nvnc_frame_unmap(self->current_fb);
 	av_frame_unref(frame);
 	av_frame_free(&frame);
 }
