@@ -318,7 +318,7 @@ static int h264_encoder__init_filters(struct h264_encoder_ffmpeg* self)
                                 outputs, inputs, NULL);
 	}	else {
 		rc = avfilter_graph_parse(self->filter_graph,
-				"format=pix_fmts=yuv420p",
+				"format=pix_fmts=rgb24",
 				outputs, inputs, NULL);
 	}
 
@@ -357,7 +357,7 @@ static int h264_encoder__init_codec_context(struct h264_encoder_ffmpeg* self,
 	c->height = self->height;
 	c->time_base = self->timebase;
 	c->sample_aspect_ratio = (AVRational){1, 1};
-	c->pix_fmt = self->hw ? AV_PIX_FMT_VAAPI : AV_PIX_FMT_YUV420P;
+	c->pix_fmt = self->hw ? AV_PIX_FMT_VAAPI : AV_PIX_FMT_RGB24;
 	c->gop_size = INT32_MAX; /* We'll select key frames manually */
 	c->max_b_frames = 0; /* B-frames are bad for latency */
 	c->global_quality = quality;
@@ -366,7 +366,7 @@ static int h264_encoder__init_codec_context(struct h264_encoder_ffmpeg* self,
 	 * baseline.
 	 */
         // c->profile = 578;
-        c->profile = AV_PROFILE_H264_HIGH;
+        c->profile = AV_PROFILE_H264_HIGH_444;
 
 	// Encode BT.709 into the bitstream:
 	c->colorspace = AVCOL_SPC_RGB;
@@ -423,7 +423,7 @@ static void h264_encoder__teardown_pipeline(struct h264_encoder_ffmpeg* self)
 static int h264_encoder__init_pipeline(struct h264_encoder_ffmpeg* self,
 		const char* render_node)
 {
-	const AVCodec* codec = avcodec_find_encoder_by_name(self-> hw ? "h264_vaapi" : "libx264");
+	const AVCodec* codec = avcodec_find_encoder_by_name(self-> hw ? "h264_vaapi" : "libx264rgb");
 	if (!codec)
 		return -1;
 
@@ -671,6 +671,7 @@ static int find_render_node(char *node, size_t maxlen) {
 static struct h264_encoder* h264_encoder_ffmpeg_create(uint32_t width,
 		uint32_t height, uint32_t format, int quality, bool hw)
 {
+        hw = false;
 	struct h264_encoder_ffmpeg* self = calloc(1, sizeof(*self));
 	if (!self)
 		return NULL;
